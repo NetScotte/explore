@@ -4,20 +4,20 @@ from datetime import datetime
 
 from commons import banklogger, loadfile
 from commons.data_producer import *
+import logging
 
 
 class Mysql:
     @banklogger.exception_capture("mysql")
-    def __init__(self, log_level='debug'):
-        self.logger = banklogger.get_logger("mysql", log_level)
+    def __init__(self):
+        self.logger = logging.getLogger("bank.mysql")
         self.pool_name = 'mysql'
         self._getconfig()
-
-        self.logger.info("connect to database {host} {user} {database}".format(**self.config))
-        self.connections = mysql.connector.connect(pool_name=self.pool_name, pool_size=3, **self.config)
+        self.logger.debug("connect to database {host} {user} {database}".format(**self.config))
+        self.connections = mysql.connector.connect(pool_name=self.pool_name, pool_size=5, **self.config)
 
     def _get_connect(self):
-        self.logger.debug("get connection from connection pool")
+        self.logger.debug("get connection from connection pool id: %s" % self.connections.connection_id)
         return mysql.connector.connect(pool_name=self.pool_name)
 
     def _getconfig(self, configname="database"):
@@ -77,7 +77,7 @@ class Mysql:
 
     @banklogger.exception_capture()
     def excute_with_params(self, sql, value):
-        self.logger.info("get params sql: {} values: {}".format(sql, value))
+        self.logger.debug("get params sql: {} values: {}".format(sql, value))
         connection = self._get_connect()
         cursor = connection.cursor()
         cursor.execute(sql, value)
@@ -107,7 +107,7 @@ class Table(Mysql):
     def __init__(self, tablename=None):
         super().__init__()
         self.tablename = tablename
-        self.logger = banklogger.get_logger("table", 'debug')
+        self.logger = logging.getLogger("bank.Table")
 
     @banklogger.exception_capture()
     def create_table(self, tablename, tableinfo):
@@ -217,6 +217,7 @@ class UserTable(Table):
     @banklogger.exception_capture("userTable")
     def __init__(self):
         super().__init__()
+        self.logger = logging.getLogger("bank.UserTable")
         self.tablename = 'user'
         self.tableattr= ("id", "name", "age", "gender", "asset", "datetime")
 
@@ -253,7 +254,7 @@ class UserTable(Table):
         self.execute_one("drop table if exists user")
 
     @banklogger.exception_capture()
-    def query(self, condition, result="*", customer=False):
+    def query(self, condition=None, result="*", customer=False):
         """
         查询对象
         :param condition: 如果customer为true,那么condition为sql语句，否则为字典
@@ -265,13 +266,7 @@ class UserTable(Table):
             queryresult = self.execute_one(condition)
         else:
             queryresult = self.query_ins(result=result, tablename=self.tablename, condition=condition)
-        finalresult = []
-        for ins in queryresult:
-            insresult = []
-            for i in ins:
-                insresult.append(i)
-            finalresult.append(insresult)
-        return finalresult
+        return queryresult
 
     @banklogger.exception_capture()
     def create_user(self, info):
@@ -304,20 +299,15 @@ class UserTable(Table):
     @banklogger.exception_capture()
     def modify_user(self, modify, query):
         """
-        修改信息
+        修改信息,根据一个条件改变一项
         :return:
         """
-        assert isinstance(modify, dict), "修改信息需要以键值对的形式出现"
+        assert isinstance(modify, tuple), "修改信息需要以键值对的形式出现"
         query = self.parser_query(query)
         assert isinstance(query, tuple) and len(query) == 3
-        values = []
-        modify_template = ""
-        for key, value in modify.items():
-            modify_template += "{}=%s ".format(key)
-            values.append(value)
-        values.append(query[2])
-        modify_command = "update user set {modify_template} where {condition} {relation} %s".format(
-            modify_template=modify_template, condition=query[0], relation=query[1])
+        values = [modify[1], query[2]]
+        modify_command = "update user set {modifyitem}=%s where {condition}{relation}%s".format(
+            modifyitem=modify[0], condition=query[0], relation=query[1])
         self.excute_with_params(sql=modify_command, value=values)
 
     @banklogger.exception_capture()
@@ -329,6 +319,7 @@ class TransactionTable(Table):
     @banklogger.exception_capture("transactionTable")
     def __init__(self):
         super().__init__()
+        self.logger = logging.getLogger("bank.TransactionTable")
         self.tablename = 'transaction'
         self.tableattr= ("id", "type", "suser", "duser", "money", "datetime")
 
@@ -397,18 +388,19 @@ class TransactionTable(Table):
         # 没有转出方，就是存钱
         if suser and duser:
             stype = 2
+            self.excute_with_params("insert into {}(id, type, suser, duser, money, datetime) values(%s, %s, %s, %s, %s, %s);".format(
+                    self.tablename), value=(transactionid, stype, suser, duser, money, timeobj))
         elif suser:
-            duser = ""
             stype = 1
+            self.excute_with_params("insert into {}(id, type, suser, money, datetime) values(%s, %s, %s, %s, %s);".format(
+                    self.tablename), value=(transactionid, stype, suser, money, timeobj))
         # 没有受理方，就是取钱
         elif duser:
-            suser = ""
             stype = 0
+            self.excute_with_params("insert into {}(id, type, duser, money, datetime) values(%s, %s, %s, %s, %s);".format(
+                    self.tablename), value=(transactionid, stype, duser, money, timeobj))
         else:
             raise Exception("not exists suser and duser")
-
-        self.excute_with_params("insert into {} {} values(%s, %s, %s, %s, %s, %s);".format(self.tablename, self.tableattr),
-                                value=(transactionid, stype, suser, duser, money, timeobj))
 
     # 交易信息不应该被删除
     @banklogger.exception_capture()
@@ -448,9 +440,14 @@ if __name__ == "__main__":
     # userTable.create_user_table()
     # # 创建transaction表
     # transactionTable.create_transaction_table()
-    usertable = UserTable()
-    usertable.modify_user({"age": 32}, "id=0083012XHpgtJz")
-    print("hello world")
+    m = Mysql()
+    userinfo = m.execute_query("select id, asset from user")
+    sql = []
+    for user in userinfo:
+        sql.append("update user set asset=%s where id='%s';" % (round(user[1], 2), user[0]))
+    m.excute_many(sql)
+
+
 
 
 

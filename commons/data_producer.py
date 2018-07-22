@@ -2,8 +2,7 @@
 import random
 import time
 import hashlib
-from commons.banklogger import *
-
+from commons.banklogger import exception_capture
 
 @exception_capture()
 def get_chars(length=None, mode=2):
@@ -29,7 +28,6 @@ def get_chars(length=None, mode=2):
 # 产生交易信息
 @exception_capture()
 def get_transaction(numbers):
-    logger = get_logger("get_transaction", "debug")
     from commons.database_operation import Mysql
     results = Mysql().execute_query("select id from user")
     # 如果是多元组，则转换为单列表
