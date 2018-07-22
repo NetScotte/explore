@@ -450,6 +450,7 @@ if __name__ == "__main__":
     # transactionTable.create_transaction_table()
     usertable = UserTable()
     usertable.modify_user({"age": 32}, "id=0083012XHpgtJz")
+    print("hello world")
 
 
 
