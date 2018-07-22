@@ -1,0 +1,5 @@
+host: 192.168.1.105
+user: root
+password: 123lloi
+database: python
+
