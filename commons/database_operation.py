@@ -36,8 +36,10 @@ class Mysql:
         cursor.execute(sql)
         self.logger.debug("fetchone result {}".format(cursor.fetchone()))
         connection.commit()
+        rowcount = cursor.rowcount
         cursor.close()
         connection.close()
+        return rowcount
 
     @banklogger.exception_capture()
     def execute_query(self, sql):
@@ -441,11 +443,14 @@ if __name__ == "__main__":
     # # 创建transaction表
     # transactionTable.create_transaction_table()
     m = Mysql()
-    userinfo = m.execute_query("select id, asset from user")
-    sql = []
-    for user in userinfo:
-        sql.append("update user set asset=%s where id='%s';" % (round(user[1], 2), user[0]))
-    m.excute_many(sql)
+    for i in range(10):
+        m = Mysql()
+        m.close()
+        print("init....")
+    # sql = []
+    # for user in userinfo:
+    #     sql.append("update user set asset=%s where id='%s';" % (round(user[1], 2), user[0]))
+    # m.excute_many(sql)
 
 
 

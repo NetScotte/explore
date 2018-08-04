@@ -137,8 +137,8 @@ if __name__ == "__main__":
     logging.config.fileConfig("conf/mylog.conf")
     logger = logging.getLogger("bank")
     operator = Operator_E()
-    for i in get_transaction(3):
-        a = random.randint(0, 4)
+    for i in get_transaction(10000):
+        a = random.randint(0, 3)
         logger.info("get transaction data: \n{} and action: {}".format(i, actionmap[a]))
         if a == 1:
             logger.info("user: {name} save: {money} to bank".format(name=i[0], money=i[2]))
